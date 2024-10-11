@@ -4,7 +4,7 @@ import Vec2 from './Vec2';
 
 const _DEBUG = true;
 
-const FOV = 90 * (Math.PI / 180);
+const FOV = 60 * (Math.PI / 180);
 const PLANE = 0.5;
 const RAY_COUNT = 100;
 
@@ -29,7 +29,7 @@ const GRID_ROWS = GAME_MAP[0].length;
 const app = new App("game");
 app.ctxScale.set(app.width / GRID_COLS, app.height / GRID_ROWS);
 
-let isGameMapOpened = true;
+let isGameMapOpened = false;
 const playerPos = new Vec2((GRID_COLS / 2) - 0.7, (GRID_ROWS / 2) - 0.5);
 let playerDirection = new Vec2(0, 0);
 let playerVelocity = 0;
@@ -49,11 +49,13 @@ app.onUpdate(() => {
     playerPos.y += cY;
   }
 
+  updatePlayerDirection();
   if (isGameMapOpened) {
     drawGrid();
-    // drawSingleRay();
     drawRays();
     drawPlayer();
+  } else {
+    renderIntersections();
   }
 });
 
@@ -117,7 +119,6 @@ function drawGrid() {
 }
 
 function drawPlayer() {
-  updatePlayerDirection();
   if (_DEBUG) {
     const halfOfFov = FOV / 2;
     const leftAngle = playerAngle - halfOfFov;
@@ -140,19 +141,38 @@ function drawPlayer() {
   app.drawCircle(playerPos, 0.1, "yellow");
 }
 
+function renderIntersections() {
+  const halfOfFov = FOV / 2;
+  const da = FOV / RAY_COUNT;
+  for (let i = 0; i < RAY_COUNT; i++) {
+    const rayAngle = playerAngle - halfOfFov + (i * da);
+    const rayDir = new Vec2(Math.cos(rayAngle)*1e-9, Math.sin(rayAngle)*1e-9);
+    const intersection = findIntersection(rayDir);
+    const p2 = intersection.point.sub(playerPos);
+
+    const correctedDistanceToIntersection = p2.length() * Math.cos(rayAngle - playerAngle);
+    let height = GRID_ROWS / correctedDistanceToIntersection;
+    if (height > GRID_ROWS) height = GRID_ROWS;
+    const offsetY = (GRID_ROWS / 2) - (height / 2);
+    const x = (i / RAY_COUNT) * GRID_COLS;
+
+    app.drawLine(new Vec2(x, offsetY), new Vec2(x, height + offsetY), 0.12, intersection.color);
+  }
+}
+
 function drawRays() {
   const halfOfFov = FOV / 2;
   const da = FOV / RAY_COUNT;
   for (let i = 0; i < RAY_COUNT; i++) {
     const rayAngle = playerAngle - halfOfFov + (i * da);
     const rayDir = new Vec2(Math.cos(rayAngle) * 1e-9, Math.sin(rayAngle) * 1e-9);
-    drawSingleRay(rayDir);
+    const intersection = findIntersection(rayDir);
+    app.drawLine(playerPos, intersection.point, 0.01, `red`);
   }
 }
 
-function drawSingleRay(rayDirection: Vec2) {
+function findIntersection(rayDirection: Vec2): { point: Vec2, color: string } {
   const rayEnd = playerPos.add(rayDirection);
-  app.drawLine(playerPos, rayEnd);
   let p3;
   let side;
   const { point, nearestSide } = walkRay(playerPos, rayEnd);
@@ -170,7 +190,7 @@ function drawSingleRay(rayDirection: Vec2) {
     side = nearestSide;
   }
 
-  app.drawLine(playerPos, p3, 0.01, `red`);
+  return { point: p3, color: side === `x` ? `#21C400` : `#147500` };
 }
 
 function walkRay(p1: Vec2, p2: Vec2): { point: Vec2, nearestSide: string } {
@@ -213,10 +233,6 @@ function walkRay(p1: Vec2, p2: Vec2): { point: Vec2, nearestSide: string } {
       p3.set(...p3t.array);
       nearestSide = 'x'
     }
-  }
-
-  if (_DEBUG) {
-    app.drawCircle(p3, 0.03, "red");
   }
 
   return { point: p3, nearestSide };
